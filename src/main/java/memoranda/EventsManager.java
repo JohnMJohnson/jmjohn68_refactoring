@@ -14,6 +14,7 @@ import java.util.HashMap;
 import java.util.Vector;
 
 import main.java.memoranda.date.CalendarDate;
+import main.java.memoranda.interfaces.IEvent;
 import main.java.memoranda.util.CurrentStorage;
 import main.java.memoranda.util.Util;
 
@@ -112,7 +113,7 @@ public class EventsManager {
 		return v;
 	}
 
-	public static Event createEvent(
+	public static IEvent createEvent(
 		CalendarDate date,
 		int hh,
 		int mm,
@@ -128,33 +129,30 @@ public class EventsManager {
 		d.getElement().appendChild(el);
 		return new EventImpl(el);
 	}
-
-	public static Event createRepeatableEvent(
-		int type,
-		CalendarDate startDate,
-		CalendarDate endDate,
-		int period,
-		int hh,
-		int mm,
-		String text,
-		boolean workDays) {
+    
+	// TASK 2-1 SMELL WITHIN A CLASS
+	// John M. Johnson Code Smell 29 APR 2018
+    // Assign 7 Task 3, Step 1
+    // Long Parameter List
+	public static IEvent createRepeatableEvent(
+		SingleEvent parameterObject) {
 		Element el = new Element("event");
 		Element rep = _root.getFirstChildElement("repeatable");
 		if (rep == null) {
 			rep = new Element("repeatable");
 			_root.appendChild(rep);
 		}
-		el.addAttribute(new Attribute("repeat-type", String.valueOf(type)));
+		el.addAttribute(new Attribute("repeat-type", String.valueOf(parameterObject.getType())));
 		el.addAttribute(new Attribute("id", Util.generateId()));
-		el.addAttribute(new Attribute("hour", String.valueOf(hh)));
-		el.addAttribute(new Attribute("min", String.valueOf(mm)));
-		el.addAttribute(new Attribute("startDate", startDate.toString()));
-		if (endDate != null)
-			el.addAttribute(new Attribute("endDate", endDate.toString()));
-		el.addAttribute(new Attribute("period", String.valueOf(period)));
+		el.addAttribute(new Attribute("hour", String.valueOf(parameterObject.getHh())));
+		el.addAttribute(new Attribute("min", String.valueOf(parameterObject.getMm())));
+		el.addAttribute(new Attribute("startDate", parameterObject.getStartDate().toString()));
+		if (parameterObject.getEndDate() != null)
+			el.addAttribute(new Attribute("endDate", parameterObject.getEndDate().toString()));
+		el.addAttribute(new Attribute("period", String.valueOf(parameterObject.getPeriod())));
 		// new attribute for wrkin days - ivanrise
-		el.addAttribute(new Attribute("workingDays",String.valueOf(workDays)));
-		el.appendChild(text);
+		el.addAttribute(new Attribute("workingDays",String.valueOf(parameterObject.isWorkDays())));
+		el.appendChild(parameterObject.getText());
 		rep.appendChild(el);
 		return new EventImpl(el);
 	}
@@ -171,10 +169,13 @@ public class EventsManager {
 	}
 
 	public static Collection getRepeatableEventsForDate(CalendarDate date) {
-		Vector reps = (Vector) getRepeatableEvents();
+	    //John M. Johnson jmjohn68 Refactored 28 APR 2018
+	    Vector<IEvent> reps = (Vector<IEvent>) getRepeatableEvents();
 		Vector v = new Vector();
-		for (int i = 0; i < reps.size(); i++) {
-			Event ev = (Event) reps.get(i);
+		//John M. Johnson jmjohn68 Refactored 28 APR 2018
+		for (IEvent ev : reps) {
+		    //(int i = 0; i < reps.size(); i++) {
+			//IEvent ev = (IEvent) reps.get(i);
 			
 			// --- ivanrise
 			// ignore this event if it's a 'only working days' event and today is weekend.
@@ -188,43 +189,39 @@ public class EventsManager {
 			 */
 			//System.out.println(date.inPeriod(ev.getStartDate(),
 			// ev.getEndDate()));
-			if (date.inPeriod(ev.getStartDate(), ev.getEndDate())) {
-				if (ev.getRepeat() == REPEAT_DAILY) {
-					int n = date.getCalendar().get(Calendar.DAY_OF_YEAR);
-					int ns =
-						ev.getStartDate().getCalendar().get(
-							Calendar.DAY_OF_YEAR);
-					//System.out.println((n - ns) % ev.getPeriod());
-					if ((n - ns) % ev.getPeriod() == 0)
-						v.add(ev);
-				} else if (ev.getRepeat() == REPEAT_WEEKLY) {
-					if (date.getCalendar().get(Calendar.DAY_OF_WEEK)
-						== ev.getPeriod())
-						v.add(ev);
-				} else if (ev.getRepeat() == REPEAT_MONTHLY) {
-					if (date.getCalendar().get(Calendar.DAY_OF_MONTH)
-						== ev.getPeriod())
-						v.add(ev);
-				} else if (ev.getRepeat() == REPEAT_YEARLY) {
-					int period = ev.getPeriod();
-					//System.out.println(date.getCalendar().get(Calendar.DAY_OF_YEAR));
-					if ((date.getYear() % 4) == 0
-						&& date.getCalendar().get(Calendar.DAY_OF_YEAR) > 60)
-						period++;
-
-					if (date.getCalendar().get(Calendar.DAY_OF_YEAR) == period)
+			//John M. Johnson jmjohn68 Refactored 28 APR 2018
+			if(repeatableEventShouldBeAdded(ev, date)){
 						v.add(ev);
 				}
 			}
-		}
 		return v;
+	}
+	
+	/**
+	 * @author John M. Johnson jmjohn68 Refactored out of above method 28 APR 2018
+	 * @param ev IEvent being evaluated
+	 * @param date CalendarDate tested against
+	 * @return
+	 */
+	private static boolean repeatableEventShouldBeAdded(IEvent ev, CalendarDate date) {
+	    return(((date.inPeriod(ev.getStartDate(), ev.getEndDate()))
+                &&(ev.getRepeat() == REPEAT_DAILY)
+                &&((date.getCalendar().get(Calendar.DAY_OF_YEAR) - ev.getStartDate().getCalendar().get(
+                        Calendar.DAY_OF_YEAR)) % ev.getPeriod() == 0))
+                ||((ev.getRepeat() == REPEAT_WEEKLY)&&(date.getCalendar().get(Calendar.DAY_OF_WEEK)
+                    == ev.getPeriod())) 
+                ||((ev.getRepeat() == REPEAT_MONTHLY)&&(date.getCalendar().get(Calendar.DAY_OF_MONTH)
+                    == ev.getPeriod()))
+                ||((ev.getRepeat() == REPEAT_YEARLY)&&(((date.getYear() % 4) == 0)
+                    &&( date.getCalendar().get(Calendar.DAY_OF_YEAR) > 60)) && 
+                    (date.getCalendar().get(Calendar.DAY_OF_YEAR) == (ev.getPeriod() + 1))));
 	}
 
 	public static Collection getActiveEvents() {
 		return getEventsForDate(CalendarDate.today());
 	}
 
-	public static Event getEvent(CalendarDate date, int hh, int mm) {
+	public static IEvent getEvent(CalendarDate date, int hh, int mm) {
 		Day d = getDay(date);
 		if (d == null)
 			return null;
@@ -246,7 +243,7 @@ public class EventsManager {
 			d.getElement().removeChild(getEvent(date, hh, mm).getContent());
 	}
 
-	public static void removeEvent(Event ev) {
+	public static void removeEvent(IEvent ev) {
 		ParentNode parent = ev.getContent().getParent();
 		parent.removeChild(ev.getContent());
 	}
@@ -406,7 +403,7 @@ public class EventsManager {
 		}
 
 		/*
-		 * public Note getNote() { return new NoteImpl(dEl);
+		 * public INote getNote() { return new NoteImpl(dEl);
 		 */
 
 		public Element getElement() {
@@ -419,7 +416,7 @@ public class EventsManager {
 		private static Vector keys = null;
 
 		private static int toMinutes(Object obj) {
-			Event ev = (Event) obj;
+			IEvent ev = (IEvent) obj;
 			return ev.getHour() * 60 + ev.getMinute();
 		}
 
